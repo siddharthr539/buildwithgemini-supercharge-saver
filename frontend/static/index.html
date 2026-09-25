@@ -292,11 +292,49 @@
   .a2img { max-width: 100%; border-radius: 12px; display: block; }
   .material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-size: 1.25rem; line-height: 1; vertical-align: middle; color: var(--accent); }
 
+  /* Vehicle Selector & Location Inputs in HUD */
+  .vehicle-select {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+  }
+  .vehicle-select option {
+    background: #1a1e28;
+    color: #fff;
+  }
+  .location-input-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    background: var(--card-bg);
+    border: 1px solid var(--accent);
+    padding: .25rem .65rem;
+    border-radius: 9999px;
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+  .location-input-pill input {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: .78rem;
+    outline: none;
+    width: 140px;
+    padding: 0;
+  }
+  .location-input-pill input::placeholder {
+    color: #ff8589;
+  }
+
   @media (max-width: 600px) {
     header { padding: .7rem 1rem; }
     #log { padding: .75rem; }
     .bubble { max-width: 94%; font-size: 0.9rem; padding: .75rem 1rem; }
     .composer { padding: .4rem .75rem calc(env(safe-area-inset-bottom, 0.75rem) + 0.4rem); }
+    .location-input-pill input { width: 110px; }
   }
 </style>
 </head>
@@ -315,16 +353,39 @@
 </header>
 
 <div class="hud-bar">
-  <div class="hud-pill">
-    <span>🚗 <strong>Model Y (75 kWh)</strong></span>
+  <!-- Interactive Tesla Model Selector -->
+  <div class="hud-pill" title="Select your Tesla model">
+    <span>🚗</span>
+    <select id="vehicle-select" class="vehicle-select">
+      <option value="Model 3 Standard Range" data-kwh="54">Model 3 Standard (54 kWh)</option>
+      <option value="Model 3 Long Range" data-kwh="78">Model 3 Long Range (78 kWh)</option>
+      <option value="Model 3 Performance" data-kwh="78">Model 3 Performance (78 kWh)</option>
+      <option value="Model Y Long Range" data-kwh="75" selected>Model Y Long Range (75 kWh)</option>
+      <option value="Model Y Performance" data-kwh="75">Model Y Performance (75 kWh)</option>
+      <option value="Model S Dual Motor" data-kwh="100">Model S Long Range (100 kWh)</option>
+      <option value="Model S Plaid" data-kwh="100">Model S Plaid (100 kWh)</option>
+      <option value="Model X Dual Motor" data-kwh="100">Model X Long Range (100 kWh)</option>
+      <option value="Model X Plaid" data-kwh="100">Model X Plaid (100 kWh)</option>
+      <option value="Cybertruck All-Wheel Drive" data-kwh="123">Cybertruck AWD (123 kWh)</option>
+      <option value="Cybertruck Cyberbeast" data-kwh="123">Cyberbeast (123 kWh)</option>
+    </select>
   </div>
+
+  <!-- Auto Populated Battery Capacity Badge -->
+  <div class="hud-pill" title="Battery capacity auto-calculated from model">
+    <span>⚡ Capacity: <strong id="hud-capacity-val">75 kWh</strong></span>
+  </div>
+
+  <!-- Mandatory Location / Zipcode Pill -->
+  <div class="location-input-pill" title="Always specify your location or zipcode">
+    <span>📍</span>
+    <input id="loc-input" placeholder="Zipcode or address..." value="Austin, TX">
+  </div>
+
   <div class="hud-pill clickable" id="hud-soc" title="Tap to simulate battery change">
     <span>🔋 <strong id="hud-soc-val">22% SoC</strong></span>
   </div>
-  <div class="hud-pill">
-    <span class="dot yellow"></span>
-    <span>Off-Peak: <strong>~$0.24/kWh</strong></span>
-  </div>
+
   <div class="hud-pill locked-badge" title="5-Star Google ratings only">
     <span>⭐ <strong>5-Star Google Spots</strong></span>
   </div>
@@ -334,13 +395,13 @@
 
 <div class="composer">
   <div class="suggestions">
-    <button type="button" class="suggestion-btn" data-prompt="Find the cheapest Supercharger near me right now with 5-star Google amenities">⚡ Cheapest station</button>
-    <button type="button" class="suggestion-btn" data-prompt="How much does it cost to charge my Tesla from 20% to 80%?">🔋 20% to 80% cost</button>
+    <button type="button" class="suggestion-btn" data-prompt="Find the cheapest Supercharger near me right now with 5-star Google amenities">⚡ Cheapest station nearby</button>
+    <button type="button" class="suggestion-btn" data-prompt="How much does it cost to charge from 20% to 80%?">🔋 20% to 80% cost</button>
     <button type="button" class="suggestion-btn" data-prompt="What are the current off-peak pricing hours and rates?">🕒 Off-peak hours</button>
   </div>
   <form id="form">
     <div class="input-bar">
-      <input id="input" placeholder="Ask SuperchargeSaver about rates, stations..." autocomplete="off" autofocus>
+      <input id="input" placeholder="Ask about rates, charging time, or stations..." autocomplete="off" autofocus>
       <button class="send-btn" aria-label="Send message">
         <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
       </button>
@@ -489,20 +550,52 @@ function renderReply(b, parts) {
   log.scrollTop = log.scrollHeight;
 }
 
+// Dynamic Model & Auto Battery Capacity Calculation
+const vehicleSelect = document.getElementById("vehicle-select");
+const hudCapacityVal = document.getElementById("hud-capacity-val");
+const locInput = document.getElementById("loc-input");
+
+if (vehicleSelect && hudCapacityVal) {
+  vehicleSelect.addEventListener("change", () => {
+    const opt = vehicleSelect.options[vehicleSelect.selectedIndex];
+    const kwh = opt.getAttribute("data-kwh");
+    hudCapacityVal.textContent = kwh + " kWh";
+  });
+}
+
 // The proxy returns { parts: [{kind:"text",text} | {kind:"a2ui",data}] }.
 form.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const text = input.value.trim();
   if (!text) return;
+
+  const selectedModel = vehicleSelect ? vehicleSelect.value : "Model Y Long Range";
+  const selectedKwh = vehicleSelect ? vehicleSelect.options[vehicleSelect.selectedIndex].getAttribute("data-kwh") : "75";
+  let location = locInput ? locInput.value.trim() : "";
+  if (!location) {
+    location = prompt("Please provide your zipcode or address to find nearby Superchargers:", "Austin, TX") || "Austin, TX";
+    if (locInput) locInput.value = location;
+  }
+
+  // Display user text in chat bubble
   bubble("user").textContent = text;
   input.value = "";
   
   // Custom Tesla-themed pulsing loading indicator
   const b = bubble("agent");
-  b.innerHTML = '<span class="typing-loader"><span class="pulse-bolt">⚡</span> <span>Analyzing Superchargers & 5-star amenities…</span></span>';
+  b.innerHTML = '<span class="typing-loader"><span class="pulse-bolt">⚡</span> <span>Checking Superchargers & 5-star amenities near ' + location + '…</span></span>';
   
   try {
-    const res = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) });
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: text,
+        vehicle_model: selectedModel,
+        battery_capacity_kwh: selectedKwh,
+        location: location
+      })
+    });
     const raw = await res.text();
     let data;
     try { data = JSON.parse(raw); }
@@ -534,15 +627,6 @@ if (hudSoc && hudSocVal) {
     if (currentSimSoC < 15) currentSimSoC = 15;
     hudSocVal.textContent = currentSimSoC + "% SoC";
     input.value = `My battery is currently at ${currentSimSoC}%. Estimate charging cost to 80% at the nearest Supercharger.`;
-    form.dispatchEvent(new Event("submit", { cancelable: true }));
-  });
-}
-
-// Interactive HUD Amenities clicker
-const hudAmenities = document.getElementById("hud-amenities");
-if (hudAmenities) {
-  hudAmenities.addEventListener("click", () => {
-    input.value = "Find the cheapest Supercharger near me and show 5-star Google rated coffee shops or restaurants nearby.";
     form.dispatchEvent(new Event("submit", { cancelable: true }));
   });
 }

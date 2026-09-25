@@ -144,6 +144,9 @@ def _extract_parts(parts: list) -> list[dict]:
 async def chat(req: Request):
     body = await req.json()
     message = body.get("message", "")
+    vehicle_model = body.get("vehicle_model") or "Model Y Long Range"
+    battery_capacity_kwh = body.get("battery_capacity_kwh") or "75"
+    location = body.get("location") or "Austin, TX"
     user_id = body.get("user_id") or "web-user"
     parts: list[dict] = []
 
@@ -160,11 +163,16 @@ async def chat(req: Request):
         )
         a2a_client = factory.create(card)
 
-        # Enforce mandatory 5-star Google rated amenities requirement across all queries
+        # Enforce mandatory 5-star Google rated amenities requirement, vehicle telemetry, and user location
+        context_header = (
+            f"[VEHICLE TELEMETRY]: Car Model: {vehicle_model} | Battery Capacity: {battery_capacity_kwh} kWh\n"
+            f"[USER LOCATION / ZIPCODE]: {location}\n"
+        )
         enforced_message = (
-            f"{message}\n\n"
+            f"{context_header}\n"
+            f"User Question: {message}\n\n"
             "(SYSTEM POLICY: When suggesting Superchargers or nearby amenities, strictly and exclusively populate "
-            "nearby coffee shops and restaurants that are 5-star rated as per Google ONLY. Do not present places below this rating.)"
+            "nearby coffee shops and restaurants that are 5-star rated as per Google ONLY. Always utilize the provided user location/zipcode and car model/capacity for calculations.)"
         )
 
         msg = Message(
