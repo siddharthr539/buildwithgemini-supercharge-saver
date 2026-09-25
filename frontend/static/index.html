@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SuperchargeSaver</title>
+<!-- Optional: used only to draw A2UI Icon components. If it can't load (offline/
+     corp network), icons fall back to showing their name as text. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined">
+<!-- Marked.js for rich markdown, bolding, lists and table rendering in messages -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root { --accent:#e82127; --accent-hover:#c5181e; --bg:#0f1115; --card-bg:#1a1d24; --text:#f0f2f5; --border:#2b303c; --gold:#f5a623; --green:#34a853; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; height:100vh; }
+  
+  header { background:var(--accent); color:#fff; padding:.75rem 1.2rem; font-weight:700; font-size:1.1rem; letter-spacing:0.5px; display:flex; align-items:center; gap:0.5rem; box-shadow:0 2px 6px rgba(0,0,0,0.3); }
+  header .tagline { font-weight:400; font-size:0.85rem; opacity:0.9; margin-left:auto; }
+
+  /* Tesla Vehicle & Charging Status HUD */
+  .hud-bar { background:#15181f; border-bottom:1px solid var(--border); padding:.5rem 1rem; display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; font-size:.82rem; }
+  .hud-pill { display:flex; align-items:center; gap:.35rem; background:var(--card-bg); border:1px solid var(--border); padding:.3rem .65rem; border-radius:20px; color:#d0d4dc; }
+  .hud-pill strong { color:#fff; }
+  .hud-pill .dot { width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block; }
+  .hud-pill .dot.yellow { background:var(--gold); }
+  .hud-pill .dot.red { background:var(--accent); }
+  .hud-pill.clickable { cursor:pointer; user-select:none; }
+  .hud-pill.clickable:hover { border-color:var(--accent); color:#fff; }
+
+  #log { flex:1; overflow-y:auto; padding:1.2rem; max-width:780px; width:100%; margin:0 auto; }
+  .msg { margin:.75rem 0; }
+  .msg.user { text-align:right; }
+  .bubble { display:inline-block; padding:.75rem 1.1rem; border-radius:12px; background:var(--card-bg); border:1px solid var(--border); color:var(--text); text-align:left; max-width:92%; line-height:1.5; font-size:0.95rem; }
+  .msg.user .bubble { background:var(--accent); color:#fff; border:none; }
+  /* When the reply is an A2UI card, drop the bubble chrome so the card stands alone. */
+  .bubble.rich { background:transparent; border:none; padding:0; max-width:100%; white-space:normal; }
+  
+  /* Markdown styling inside bubbles */
+  .bubble.markdown-content p { margin:0 0 .5rem 0; }
+  .bubble.markdown-content p:last-child { margin-bottom:0; }
+  .bubble.markdown-content h1, .bubble.markdown-content h2, .bubble.markdown-content h3 { color:#fff; margin:.75rem 0 .35rem 0; font-size:1.05rem; }
+  .bubble.markdown-content ul, .bubble.markdown-content ol { margin:.25rem 0 .5rem 1.2rem; padding:0; }
+  .bubble.markdown-content li { margin-bottom:.25rem; }
+  .bubble.markdown-content strong { color:#fff; }
+  .bubble.markdown-content hr { border:none; border-top:1px solid var(--border); margin:.6rem 0; }
+  
+  /* 5-Star Amenities & Table styling */
+  .bubble.markdown-content table { border-collapse:collapse; width:100%; margin:.5rem 0; font-size:.85rem; }
+  .bubble.markdown-content th, .bubble.markdown-content td { border:1px solid var(--border); padding:.4rem .6rem; text-align:left; }
+  .bubble.markdown-content th { background:#222630; color:#fff; }
+
+  /* Animated loader */
+  .typing-loader { display:inline-flex; align-items:center; gap:0.4rem; color:#8c93a0; font-size:0.85rem; }
+  .pulse-bolt { animation:pulse 1s infinite alternate; font-size:1.1rem; color:var(--accent); }
+  @keyframes pulse { from { opacity: 0.4; transform: scale(0.9); } to { opacity: 1; transform: scale(1.15); } }
+
+  .composer { max-width:780px; width:100%; margin:0 auto; display:flex; flex-direction:column; background:var(--bg); border-top:1px solid var(--border); }
+  .suggestions { display:flex; gap:.5rem; padding:.75rem 1rem 0; overflow-x:auto; }
+  .suggestion-btn { background:var(--card-bg); border:1px solid var(--border); color:var(--text); border-radius:16px; padding:.4rem .85rem; font-size:.82rem; cursor:pointer; white-space:nowrap; transition:all .2s ease; display:flex; align-items:center; gap:0.35rem; }
+  .suggestion-btn:hover { border-color:var(--accent); background:rgba(232,33,39,0.12); color:#fff; }
+  
+  form { display:flex; gap:.5rem; padding:.75rem 1rem 1rem; background:transparent; }
+  input { flex:1; padding:.7rem 1rem; border:1px solid var(--border); border-radius:8px; font-size:1rem; background:var(--card-bg); color:var(--text); outline:none; }
+  input:focus { border-color:var(--accent); }
+  button { padding:.7rem 1.2rem; border:none; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; transition:background .2s ease; }
+  button:hover { background:var(--accent-hover); }
+
+  /* --- A2UI component styles (Card, Column, Row, Text, Divider, List, Image, Icon) --- */
+  .a2card { border:1px solid var(--border); border-radius:12px; padding:1.1rem; background:var(--card-bg); color:var(--text); box-shadow:0 3px 10px rgba(0,0,0,.3); max-width:100%; }
+  .a2card + .a2card, .a2col > .a2card { margin-top:.6rem; }
+  .a2col { display:flex; flex-direction:column; gap:.4rem; }
+  .a2row { display:flex; flex-direction:row; gap:.6rem; align-items:center; flex-wrap:wrap; }
+  .a2row.between { justify-content:space-between; }
+  .a2text { margin:0; line-height:1.4; color:var(--text); }
+  .a2text.a2-h1 { font-size:1.5rem; font-weight:700; color:#fff; }
+  .a2text.a2-h2 { font-size:1.25rem; font-weight:700; color:#fff; }
+  .a2text.a2-h3 { font-size:1.1rem; font-weight:600; color:#fff; }
+  .a2text.a2-h4 { font-size:1rem; font-weight:600; }
+  .a2text.a2-caption { font-size:.85rem; color:#8c93a0; }
+  .a2divider { border:none; border-top:1px solid var(--border); margin:.4rem 0; width:100%; }
+  .a2img { max-width:100%; border-radius:8px; display:block; }
+  .material-symbols-outlined { font-family:'Material Symbols Outlined'; font-size:1.25rem; line-height:1; vertical-align:middle; color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <span>⚡ SuperchargeSaver</span>
+  <span class="tagline">Tesla Smart Charging Optimizer</span>
+</header>
+
+<div class="hud-bar">
+  <div class="hud-pill">
+    <span class="dot"></span>
+    <span>Vehicle: <strong>Model Y Long Range (75 kWh)</strong></span>
+  </div>
+  <div class="hud-pill clickable" id="hud-soc" title="Click to adjust simulated battery level">
+    <span>Battery: <strong id="hud-soc-val">22% SoC</strong> 🔋</span>
+  </div>
+  <div class="hud-pill">
+    <span class="dot yellow"></span>
+    <span>Current Tier: <strong>Off-Peak (~$0.24/kWh)</strong></span>
+  </div>
+  <div class="hud-pill locked-badge" title="System strictly configured to only surface 5-star Google rated amenities">
+    <span>⭐ <strong>5-Star Google Amenities Locked</strong></span>
+  </div>
+</div>
+
+<div id="log"></div>
+<div class="composer">
+  <div class="suggestions">
+    <button type="button" class="suggestion-btn" data-prompt="Find the cheapest Supercharger near me right now with 5-star Google amenities">⚡ Cheapest station nearby</button>
+    <button type="button" class="suggestion-btn" data-prompt="How much does it cost to charge my Tesla from 20% to 80%?">🔋 Estimate 20% to 80% cost</button>
+    <button type="button" class="suggestion-btn" data-prompt="What are the current off-peak pricing hours and rates?">🕒 Current off-peak rates</button>
+  </div>
+  <form id="form">
+    <input id="input" placeholder="Ask SuperchargeSaver about rates, locations, or battery..." autocomplete="off" autofocus>
+    <button>Send</button>
+  </form>
+</div>
+
+<script>
+const log = document.getElementById("log");
+const form = document.getElementById("form");
+const input = document.getElementById("input");
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+function bubble(who) {
+  const m = el("div", "msg " + who);
+  const b = el("div", "bubble");
+  m.appendChild(b); log.appendChild(m); log.scrollTop = log.scrollHeight;
+  return b;
+}
+
+/* ----------------------------------------------------------------------------
+ * A2UI mini-renderer (v0.8 Basic Catalog subset).
+ * Renders Card / Column / Row / Text / Divider / List / Image / Icon.
+ * Anything else falls back to plain text (see renderReply). All text goes in via
+ * textContent and image URLs are validated, so agent output can't inject HTML.
+ * -------------------------------------------------------------------------- */
+
+// A "bound value" is usually {literalString: "..."}; we only support literals.
+function boundStr(v) {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v.literalString === "string") return v.literalString;
+  return "";
+}
+
+// child ids of a component's props: single `child` and/or `children.explicitList`.
+function childIds(props) {
+  const ids = [];
+  if (props && typeof props.child === "string") ids.push(props.child);
+  const ch = props && props.children;
+  if (ch && Array.isArray(ch.explicitList)) for (const c of ch.explicitList) if (typeof c === "string") ids.push(c);
+  return ids;
+}
+
+// A2UI icon names are camelCase (locationOn); Material Symbols wants snake_case.
+function iconName(n) { return String(n || "").replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase(); }
+
+function buildNode(id, comps, seen) {
+  if (!id || seen.has(id)) return null;   // missing / cycle guard
+  seen.add(id);
+  const spec = comps[id];
+  if (!spec || typeof spec !== "object") return null;
+  const type = Object.keys(spec)[0];
+  const props = spec[type] || {};
+  const kids = () => childIds(props).map(cid => buildNode(cid, comps, seen)).filter(Boolean);
+
+  switch (type) {
+    case "Card": {
+      const d = el("div", "a2card"); kids().forEach(n => d.appendChild(n)); return d;
+    }
+    case "Column":
+    case "List": {
+      const horizontal = type === "List" && props.direction === "horizontal";
+      const d = el("div", horizontal ? "a2row" : "a2col"); kids().forEach(n => d.appendChild(n)); return d;
+    }
+    case "Row": {
+      const d = el("div", "a2row" + (props.distribution === "spaceBetween" ? " between" : ""));
+      kids().forEach(n => d.appendChild(n)); return d;
+    }
+    case "Text": {
+      const t = el("div", "a2text");
+      const hint = String(props.usageHint || "body").toLowerCase();
+      if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(hint)) t.classList.add("a2-" + hint);
+      else if (hint === "caption") t.classList.add("a2-caption");
+      t.textContent = boundStr(props.text);
+      return t;
+    }
+    case "Divider":
+      return el("hr", "a2divider");
+    case "Image": {
+      const src = boundStr(props.url || props.src);
+      if (!/^https?:\/\//i.test(src)) return null;   // only allow safe URLs
+      const img = el("img", "a2img"); img.src = src; img.alt = boundStr(props.alt) || ""; return img;
+    }
+    case "Icon": {
+      const s = el("span", "material-symbols-outlined"); s.textContent = iconName(boundStr(props.name) || props.name); return s;
+    }
+    default:
+      return null;   // unknown component -> skipped (text fallback covers content)
+  }
+}
+
+// Render one or more A2UI messages (beginRendering + surfaceUpdate) into `container`.
+// Returns true if anything was drawn.
+function renderSurface(messages, container) {
+  const comps = {};
+  const roots = [];
+  for (const m of messages) {
+    if (m.beginRendering && typeof m.beginRendering.root === "string") roots.push(m.beginRendering.root);
+    const su = m.surfaceUpdate;
+    if (su && Array.isArray(su.components)) for (const c of su.components) if (c && c.id && c.component) comps[c.id] = c.component;
+  }
+  let rootIds = roots.filter(r => comps[r]);
+  if (rootIds.length === 0) {   // no valid root given -> infer un-referenced components
+    const referenced = new Set();
+    for (const id in comps) { const spec = comps[id]; childIds(spec[Object.keys(spec)[0]] || {}).forEach(c => referenced.add(c)); }
+    rootIds = Object.keys(comps).filter(id => !referenced.has(id));
+  }
+  let drew = false;
+  for (const rid of rootIds) { const node = buildNode(rid, comps, new Set()); if (node) { container.appendChild(node); drew = true; } }
+  return drew;
+}
+
+// Fallback: pull every Text value out of the messages as plain text.
+function flattenText(messages) {
+  const out = [];
+  for (const m of messages) {
+    const su = m.surfaceUpdate;
+    if (su && Array.isArray(su.components)) for (const c of su.components) if (c && c.component && c.component.Text) out.push(boundStr(c.component.Text.text));
+  }
+  return out.join("\n").trim();
+}
+
+function renderReply(b, parts) {
+  b.textContent = "";   // clear the placeholder
+  const texts = parts.filter(p => p && (p.kind === "text" || (!p.kind && p.text))).map(p => p.text || "");
+  const a2ui = parts.filter(p => p && p.kind === "a2ui" && p.data).map(p => p.data);
+
+  const textStr = texts.join("\n\n").trim();
+  if (textStr) {
+    b.classList.add("markdown-content");
+    // Render through marked parser if available, falling back to text
+    if (typeof marked !== "undefined" && marked.parse) {
+      b.innerHTML = marked.parse(textStr);
+    } else {
+      b.appendChild(el("div", null, textStr));
+    }
+  }
+
+  if (a2ui.length) {
+    b.classList.add("rich");
+    if (!renderSurface(a2ui, b)) b.appendChild(el("div", null, flattenText(a2ui) || "(no card content)"));
+  }
+  if (!b.childNodes.length) b.textContent = "(no response)";
+  log.scrollTop = log.scrollHeight;
+}
+
+// The proxy returns { parts: [{kind:"text",text} | {kind:"a2ui",data}] }.
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  bubble("user").textContent = text;
+  input.value = "";
+  
+  // Custom Tesla-themed pulsing loading indicator
+  const b = bubble("agent");
+  b.innerHTML = '<span class="typing-loader"><span class="pulse-bolt">⚡</span> <span>Analyzing Superchargers & 5-star amenities…</span></span>';
+  
+  try {
+    const res = await fetch("/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) });
+    const raw = await res.text();
+    let data;
+    try { data = JSON.parse(raw); }
+    catch { throw new Error(`Server returned non-JSON (HTTP ${res.status}). ${raw.slice(0, 300)}`); }
+    renderReply(b, data.parts || []);
+  } catch (e) {
+    b.textContent = "Error: " + e.message;
+  }
+});
+
+// Attach click listener to prompt suggestion buttons
+document.querySelectorAll(".suggestion-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const prompt = btn.getAttribute("data-prompt");
+    if (prompt) {
+      input.value = prompt;
+      form.dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+  });
+});
+
+// Interactive HUD Battery SoC clicker
+let currentSimSoC = 22;
+const hudSoc = document.getElementById("hud-soc");
+const hudSocVal = document.getElementById("hud-soc-val");
+if (hudSoc && hudSocVal) {
+  hudSoc.addEventListener("click", () => {
+    currentSimSoC = (currentSimSoC + 15) % 90;
+    if (currentSimSoC < 15) currentSimSoC = 15;
+    hudSocVal.textContent = currentSimSoC + "% SoC";
+    input.value = `My battery is currently at ${currentSimSoC}%. Estimate charging cost to 80% at the nearest Supercharger.`;
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+  });
+}
+
+// Interactive HUD Amenities clicker
+const hudAmenities = document.getElementById("hud-amenities");
+if (hudAmenities) {
+  hudAmenities.addEventListener("click", () => {
+    input.value = "Find the cheapest Supercharger near me and show 5-star Google rated coffee shops or restaurants nearby.";
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+  });
+}
+</script>
+</body>
+</html>
